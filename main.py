@@ -12,6 +12,7 @@ ASSETS_FOLDER = os.path.join(GAME_FOLDER, 'assets')
 class Game:
     def __init__(self):
         pygame.init()
+        # Define a tela (Full Screen)
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
@@ -37,32 +38,44 @@ class Game:
         self.new_game()
 
     def new_game(self):
-        self.score = 0 # Inicia pontuação zerada
+        self.score = 0 
         self.all_sprites = pygame.sprite.Group()
         self.platforms = pygame.sprite.Group()
         self.enemies = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
         
+        # Cria o chão inicial (mais comprido para começar)
         ground_h = int(60 * SCALE)
-        ground = Platform(0, HEIGHT - ground_h, WIDTH, ground_h)
+        # Chão inicial cobre a tela toda
+        ground = Platform(0, HEIGHT - ground_h, WIDTH * 2, ground_h)
         self.all_sprites.add(ground)
         self.platforms.add(ground)
         
-        plat_w = int(200 * SCALE)
-        plat_h = int(30 * SCALE)
-        p1 = Platform(int(200 * SCALE), HEIGHT - int(250 * SCALE), plat_w, plat_h)
-        self.all_sprites.add(p1)
-        self.platforms.add(p1)
+        # Cria algumas plataformas iniciais
+        self.spawn_platform(int(WIDTH * 0.5), int(WIDTH * 0.8))
+        self.spawn_platform(int(WIDTH * 0.9), int(WIDTH * 1.2))
         
-        self.spawn_enemy()
-        self.spawn_enemy()
-
         self.player = Player(self)
         self.all_sprites.add(self.player)
+        
+        # Spawna inimigo inicial
+        self.spawn_enemy()
+
+    def spawn_platform(self, min_x, max_x):
+        # Cria uma plataforma em um lugar aleatório dentro da faixa X
+        w = int(random.randint(150, 300) * SCALE)
+        h = int(30 * SCALE)
+        x = random.randint(min_x, max_x)
+        y = random.randint(int(HEIGHT * 0.4), int(HEIGHT * 0.75))
+        
+        p = Platform(x, y, w, h)
+        self.all_sprites.add(p)
+        self.platforms.add(p)
 
     def spawn_enemy(self):
+        # Inimigos nascem fora da tela (na direita)
         etype = random.choice(['gato', 'vaca', 'guarda_chuva'])
-        x = random.randint(WIDTH + 50, WIDTH + 300)
+        x = WIDTH + random.randint(100, 300)
         y = HEIGHT - int(120 * SCALE)
         if etype == 'guarda_chuva': y -= int(150 * SCALE)
         
@@ -71,6 +84,7 @@ class Game:
         self.enemies.add(e)
 
     def run(self):
+        # Posicionamento dos botões
         bx = WIDTH - self.btn_size - int(self.padding * 0.8) 
         by = HEIGHT - self.btn_size - int(self.padding * 0.6) 
         self.btn_fire = pygame.Rect(bx, by, self.btn_size, self.btn_size)
@@ -125,7 +139,40 @@ class Game:
     def update(self):
         self.all_sprites.update()
         
-        # 1. Colisão: Bala mata Inimigo (Score)
+        # --- LÓGICA DA CÂMERA (SCROLL) ---
+        # Se o jogador chegar no meio da tela (lado direito), o mundo anda pra trás
+        if self.player.rect.right >= WIDTH / 2:
+            # A diferença é o quanto ele "passou" do meio
+            scroll = self.player.rect.right - (WIDTH / 2)
+            self.player.rect.right = WIDTH / 2 # Trava o jogador no meio
+            
+            # Move TUDO para a esquerda
+            for plat in self.platforms:
+                plat.rect.x -= scroll
+                # Se a plataforma sair da tela pela esquerda, deleta ela
+                if plat.rect.right < 0:
+                    plat.kill()
+
+            for enemy in self.enemies:
+                enemy.rect.x -= scroll
+                
+            for bullet in self.bullets:
+                bullet.rect.x -= scroll
+                
+            # GERAÇÃO INFINITA DE PLATAFORMAS
+            # Se tiver poucas plataformas (menos de 5), cria mais na frente
+            if len(self.platforms) < 5:
+                # Cria uma nova plataforma lá na direita (fora da tela)
+                self.spawn_platform(WIDTH, WIDTH + 200)
+
+            # GERAÇÃO INFINITA DE INIMIGOS
+            if len(self.enemies) < 2: # Mantém sempre 1 ou 2 inimigos vindo
+                if random.randint(0, 100) < 2: # Pequena chance a cada frame
+                    self.spawn_enemy()
+
+        # --- FIM DA CÂMERA ---
+
+        # Colisões (Tiro x Inimigo)
         hits = pygame.sprite.groupcollide(self.enemies, self.bullets, False, True)
         for enemy, bullets_list in hits.items():
             for b in bullets_list:
@@ -134,33 +181,23 @@ class Game:
                     expl = Explosion(enemy.rect.center)
                     self.all_sprites.add(expl)
                     enemy.kill()
-                    self.score += 100 # Ganha 100 pontos!
-                    self.spawn_enemy()
+                    self.score += 100 
 
-        # 2. Colisão: Inimigo acerta Jogador (Dano)
+        # Colisão (Inimigo x Jogador)
         hits = pygame.sprite.spritecollide(self.player, self.enemies, False)
         if hits:
-            # Tira vida
-            self.player.hp -= 2 # Dano do inimigo
-            
-            # Efeito de empurrão (Knockback) para não morrer instantâneo
+            self.player.hp -= 1
             for enemy in hits:
                 if enemy.rect.centerx > self.player.rect.centerx:
                     enemy.rect.x += int(30 * SCALE)
                 else:
                     enemy.rect.x -= int(30 * SCALE)
 
-        # 3. Game Over (Se vida acabar, reinicia)
-        if self.player.hp <= 0:
+        # Game Over e Queda no Abismo
+        if self.player.hp <= 0 or self.player.rect.top > HEIGHT:
             print(f"GAME OVER! Score Final: {self.score}")
             self.new_game()
 
-        for e in self.enemies:
-            if e.rect.right < -100:
-                e.kill()
-                self.spawn_enemy()
-
-    # Função auxiliar para desenhar a barrinha
     def draw_health_bar(self, surface, x, y, pct):
         if pct < 0: pct = 0
         BAR_LENGTH = int(80 * SCALE)
@@ -168,10 +205,8 @@ class Game:
         fill = (pct / 100) * BAR_LENGTH
         outline_rect = pygame.Rect(x, y, BAR_LENGTH, BAR_HEIGHT)
         fill_rect = pygame.Rect(x, y, fill, BAR_HEIGHT)
-        
         col = GREEN
         if pct < 30: col = RED
-        
         pygame.draw.rect(surface, col, fill_rect)
         pygame.draw.rect(surface, WHITE, outline_rect, 2)
 
@@ -183,8 +218,7 @@ class Game:
             
         self.all_sprites.draw(self.screen)
         
-        # --- UI E BOTÕES ---
-        # Botão Tiro
+        # Botões
         pygame.draw.circle(self.screen, WHITE, self.btn_fire.center, self.btn_size // 2 + 3)
         s_fire = pygame.Surface((self.btn_size, self.btn_size), pygame.SRCALPHA)
         pygame.draw.circle(s_fire, (255, 0, 0, 200), (self.btn_size//2, self.btn_size//2), self.btn_size // 2)
@@ -192,29 +226,23 @@ class Game:
         txt = self.font.render("TIRO", True, WHITE)
         self.screen.blit(txt, txt.get_rect(center=self.btn_fire.center))
 
-        # Botão Arma
         pygame.draw.rect(self.screen, WHITE, self.btn_weapon.inflate(6,6), border_radius=12)
         pygame.draw.rect(self.screen, (50, 50, 50), self.btn_weapon, border_radius=12)
         w_name = WEAPONS_LIST[self.player.weapon_index]['name']
         txt_w = self.font.render(w_name, True, WHITE)
         self.screen.blit(txt_w, txt_w.get_rect(center=self.btn_weapon.center))
         
-        # Botão Personagem
         pygame.draw.rect(self.screen, WHITE, self.btn_char.inflate(6,6), border_radius=12)
         pygame.draw.rect(self.screen, (50, 100, 50), self.btn_char, border_radius=12)
         c_name = self.player.char_list[self.player.char_index].upper()
         txt_c = self.font.render(c_name, True, WHITE)
         self.screen.blit(txt_c, txt_c.get_rect(center=self.btn_char.center))
 
-        # --- NOVA UI (VIDA E PLACAR) ---
-        # Barra de Vida (em cima do jogador)
+        # UI: Vida e Placar
         self.draw_health_bar(self.screen, self.player.rect.x - 10, self.player.rect.y - 15, self.player.hp)
 
-        # Placar (Topo Centro)
         score_text = self.font.render(f"SCORE: {self.score}", True, WHITE)
-        # Sombra preta para leitura
         score_shadow = self.font.render(f"SCORE: {self.score}", True, BLACK)
-        
         cx = WIDTH // 2
         cy = int(20 * SCALE)
         self.screen.blit(score_shadow, (cx - score_text.get_width()//2 + 2, cy + 2))
