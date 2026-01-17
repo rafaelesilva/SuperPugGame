@@ -2,9 +2,9 @@ import pygame
 import sys
 import os
 import random 
-import math # Importante para animações
+import math 
 from settings import *
-from sprites import Player, Platform, Enemy, Explosion, Flag, Bone # Adicionado Bone
+from sprites import Player, Platform, Enemy, Explosion, Flag, Bone
 from weapons import Projectile, WEAPONS_LIST
 
 GAME_FOLDER = os.path.dirname(__file__)
@@ -22,7 +22,6 @@ class Game:
         self.running = True
         
         self.bg = None
-        # Tenta carregar imagem de fundo
         for name in ['fundo.png', 'paisagem.jpg', 'ceu_limpo.png']:
             path = os.path.join(ASSETS_FOLDER, name)
             if os.path.exists(path):
@@ -35,7 +34,6 @@ class Game:
         self.padding = int(120 * SCALE) 
         self.btn_size = int(HEIGHT * 0.18) 
         
-        # Controles
         dpad_size = int(80 * SCALE)
         margin = int(20 * SCALE)
         base_y = HEIGHT - dpad_size - margin
@@ -44,13 +42,11 @@ class Game:
         self.btn_right = pygame.Rect(base_x + dpad_size + 10, base_y, dpad_size, dpad_size)
         self.btn_up = pygame.Rect(base_x + (dpad_size // 2) + 5, base_y - dpad_size - 10, dpad_size, dpad_size)
 
-        # SISTEMA DE FASES
         self.level = 1
-        self.total_score = 0 # Score acumulado entre fases
+        self.total_score = 0
         self.new_game()
 
     def new_game(self):
-        # O Score da fase começa em 0, mas mantemos o total se passar de fase
         self.phase_score = 0 
         
         self.all_sprites = pygame.sprite.Group()
@@ -58,7 +54,7 @@ class Game:
         self.enemies = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
         self.flags = pygame.sprite.Group()
-        self.bones = pygame.sprite.Group() # Grupo dos ossinhos
+        self.bones = pygame.sprite.Group() 
         
         self.create_level_map(difficulty=self.level)
         
@@ -68,21 +64,17 @@ class Game:
     def create_level_map(self, difficulty=1):
         ground_y = HEIGHT - int(60 * SCALE)
         
-        # Base inicial segura
         p = Platform(0, ground_y, int(WIDTH * 1.5), int(60 * SCALE))
         self.all_sprites.add(p)
         self.platforms.add(p)
         
         current_x = int(WIDTH * 1.5)
         
-        # Ajuste de dificuldade
-        # Quanto maior o nível, maiores os buracos
         min_gap = int(50 * SCALE) + (difficulty * 5)
         max_gap = int(120 * SCALE) + (difficulty * 15) 
-        # Limita o buraco máximo para não ficar impossível
         if max_gap > 300 * SCALE: max_gap = 300 * SCALE
 
-        segments = 15 + (difficulty * 2) # Fases ficam mais longas
+        segments = 15 + (difficulty * 2) 
         
         for i in range(segments):
             gap = random.randint(min_gap, max_gap)
@@ -90,8 +82,6 @@ class Game:
             
             plat_w = random.randint(int(200 * SCALE), int(500 * SCALE))
             
-            # Altura da plataforma
-            # Nível 1: Quase tudo no chão. Nível alto: Mais variação vertical.
             height_variance = int(50 * SCALE) * difficulty
             if height_variance > 250 * SCALE: height_variance = 250 * SCALE
             
@@ -104,20 +94,16 @@ class Game:
             self.all_sprites.add(p)
             self.platforms.add(p)
             
-            # --- SPAWN DE OSSINHOS ---
-            # 50% de chance de ter ossinhos na plataforma
             if random.random() > 0.5:
-                # Cria de 1 a 3 ossinhos
                 num_bones = random.randint(1, 3)
                 start_bone_x = current_x + int(50*SCALE)
                 for b in range(num_bones):
                     bx = start_bone_x + (b * int(50*SCALE))
-                    if bx < current_x + plat_w - int(50*SCALE): # Garante que está dentro
+                    if bx < current_x + plat_w - int(50*SCALE): 
                         bone = Bone(bx, plat_y)
                         self.all_sprites.add(bone)
                         self.bones.add(bone)
 
-            # --- SPAWN DE INIMIGOS ---
             if random.random() > 0.4:
                 etype = random.choice(['gato', 'vaca', 'guarda_chuva'])
                 ex = current_x + plat_w // 2
@@ -128,7 +114,6 @@ class Game:
             
             current_x += plat_w
 
-        # Área Final
         current_x += int(150 * SCALE)
         final_plat = Platform(current_x, ground_y, int(500 * SCALE), int(60 * SCALE))
         self.all_sprites.add(final_plat)
@@ -139,7 +124,6 @@ class Game:
         self.flags.add(flag)
 
     def run(self):
-        # Define botões de ação
         bx_fire = WIDTH - self.btn_size - int(self.padding * 0.5)
         by_fire = HEIGHT - self.btn_size - int(self.padding * 0.5)
         self.btn_fire = pygame.Rect(bx_fire, by_fire, self.btn_size, self.btn_size)
@@ -193,7 +177,6 @@ class Game:
     def update(self):
         self.all_sprites.update()
         
-        # Câmera
         if self.player.rect.right >= WIDTH * 0.4:
             scroll = self.player.rect.right - (WIDTH * 0.4)
             self.player.rect.right = WIDTH * 0.4 
@@ -201,19 +184,15 @@ class Game:
                 if sprite != self.player:
                     sprite.rect.x -= scroll
 
-        # --- COLETA DE OSSINHOS ---
-        hits = pygame.sprite.spritecollide(self.player, self.bones, True) # True = remove o osso
+        hits = pygame.sprite.spritecollide(self.player, self.bones, True)
         for bone in hits:
-            self.total_score += 50 # 50 pontos por osso
-            # (Opcional) Tocar som de coleta aqui
+            self.total_score += 50 
 
-        # --- PASSOU DE FASE ---
         if pygame.sprite.spritecollide(self.player, self.flags, False):
             print(f"PASSOU O NIVEL {self.level}!")
             self.total_score += 1000
-            self.level += 1 # Aumenta a dificuldade
+            self.level += 1 
             
-            # Tela de transição rápida (desenho simples)
             self.screen.fill((0,0,0))
             txt = self.font.render(f"NIVEL {self.level} - PREPARE-SE!", True, (255,255,255))
             self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2))
@@ -222,13 +201,10 @@ class Game:
             
             self.new_game()
 
-        # Caiu no buraco (Game Over ou Reinicia fase?)
-        # Por enquanto reinicia mantendo o nível, mas zera score da fase se quiser ser punitivo
         if self.player.rect.top > HEIGHT:
             print("CAIU!")
-            self.new_game() # Reinicia o mesmo nível
+            self.new_game()
 
-        # Colisões Inimigos/Tiros
         hits = pygame.sprite.groupcollide(self.enemies, self.bullets, False, True)
         for enemy, bullets_list in hits.items():
             for b in bullets_list:
@@ -239,7 +215,6 @@ class Game:
                     enemy.kill()
                     self.total_score += 100 
 
-        # Dano Jogador
         hits = pygame.sprite.spritecollide(self.player, self.enemies, False)
         if hits:
             self.player.hp -= 1
@@ -248,7 +223,7 @@ class Game:
 
         if self.player.hp <= 0:
             print("GAME OVER")
-            self.level = 1 # Volta pro nível 1
+            self.level = 1 
             self.total_score = 0
             self.new_game()
 
@@ -276,14 +251,18 @@ class Game:
             
         self.all_sprites.draw(self.screen)
         
-        # HUD: Score e Nível
+        # --- MUDANÇA 2: PLACAR ORGANIZADO ---
         s_txt = self.font.render(f"SCORE: {self.total_score}", True, (255, 255, 255))
         l_txt = self.font.render(f"NIVEL: {self.level}", True, (255, 255, 0))
         
+        # Score no topo (y=10)
         self.screen.blit(s_txt, (WIDTH//2 - s_txt.get_width()//2, 10))
-        self.screen.blit(l_txt, (WIDTH//2 - l_txt.get_width()//2, 40))
+        
+        # Nível logo abaixo do Score (calculado automaticamente para não sobrepor)
+        gap = s_txt.get_height() + 5
+        self.screen.blit(l_txt, (WIDTH//2 - l_txt.get_width()//2, 10 + gap))
+        # ------------------------------------
 
-        # Controles
         self.draw_transparent_btn(self.btn_left, "<")
         self.draw_transparent_btn(self.btn_right, ">")
         self.draw_transparent_btn(self.btn_up, "^")
@@ -293,7 +272,6 @@ class Game:
         txt = self.font.render("TIRO", True, (255, 255, 255))
         self.screen.blit(txt, txt.get_rect(center=self.btn_fire.center))
 
-        # Botões Menu
         pygame.draw.rect(self.screen, (50, 50, 50), self.btn_weapon, border_radius=10)
         w_name = WEAPONS_LIST[self.player.weapon_index]['name']
         self.screen.blit(self.font.render(w_name, True, (255, 255, 255)), (self.btn_weapon.x + 10, self.btn_weapon.y + 10))

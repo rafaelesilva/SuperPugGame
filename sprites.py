@@ -1,7 +1,7 @@
 import pygame
 import os
 import random
-import math # Importante para a animação do ossinho
+import math 
 from settings import *
 
 GAME_FOLDER = os.path.dirname(__file__)
@@ -115,7 +115,7 @@ class Enemy(pygame.sprite.Sprite):
     def __init__(self, x, y, type_name, game, platform=None):
         super().__init__()
         self.game = game
-        self.platform = platform # Guarda a plataforma onde nasceu para patrulhar
+        self.platform = platform 
         self.type = type_name
         self.vel_y = 0 
         
@@ -148,23 +148,16 @@ class Enemy(pygame.sprite.Sprite):
         self.direction = -1 
 
     def update(self):
-        # Movimento Horizontal
         self.rect.x += self.speed * self.direction
         
-        # --- PATRULHA INTELIGENTE ---
-        # Se tiver uma plataforma designada e não for voador, não cai da borda
         if self.type != 'guarda_chuva' and self.platform:
-            # Se chegar na borda esquerda, vira pra direita
             if self.rect.left < self.platform.rect.left:
                 self.rect.left = self.platform.rect.left
                 self.direction = 1
-            # Se chegar na borda direita, vira pra esquerda
             elif self.rect.right > self.platform.rect.right:
                 self.rect.right = self.platform.rect.right
                 self.direction = -1
-        # ----------------------------
 
-        # Gravidade (Exceto guarda-chuva)
         if self.type != 'guarda_chuva':
             self.vel_y += GRAVITY
             self.rect.y += self.vel_y
@@ -174,10 +167,8 @@ class Enemy(pygame.sprite.Sprite):
                     self.rect.bottom = hits[0].rect.top
                     self.vel_y = 0
         else:
-            # Guarda-chuva flutua
             self.rect.y += random.choice([-2, 2])
 
-        # Animação de virar
         if self.direction == 1: self.image = self.image_right
         else: self.image = self.image_left
         
@@ -225,24 +216,24 @@ class Bone(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
         path = os.path.join(ASSETS_FOLDER, 'ossinho.png')
-        self.size = (int(40 * SCALE), int(40 * SCALE))
+        # --- MUDANÇA 1: REDUÇÃO AGRESSIVA DO TAMANHO ---
+        # Mudamos de 25 para 15. Agora deve ficar bem pequeno.
+        self.size = (int(15 * SCALE), int(15 * SCALE))
+        # -----------------------------------------------
         try:
             self.image = pygame.image.load(path).convert_alpha()
             self.image = pygame.transform.scale(self.image, self.size)
         except:
-            # Fallback se a imagem não existir: quadrado branco
             self.image = pygame.Surface(self.size)
             self.image.fill((255, 255, 255)) 
             
         self.rect = self.image.get_rect()
         self.rect.centerx = x
-        self.rect.bottom = y - int(10 * SCALE) # Fica um pouco acima do chão
+        self.rect.bottom = y - int(10 * SCALE)
         
-        # Variáveis para animação suave (flutuar)
         self.y_start = self.rect.y
         self.float_offset = 0
 
     def update(self):
-        # Faz o ossinho subir e descer suavemente usando seno
         self.float_offset += 0.1
         self.rect.y = self.y_start + int(5 * math.sin(self.float_offset))
