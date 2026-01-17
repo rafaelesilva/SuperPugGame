@@ -111,11 +111,12 @@ class Flag(pygame.sprite.Sprite):
         self.rect.bottom = y
 
 class Enemy(pygame.sprite.Sprite):
-    def __init__(self, x, y, type_name, game):
+    def __init__(self, x, y, type_name, game, platform=None):
         super().__init__()
         self.game = game
+        self.platform = platform # Guarda a plataforma onde nasceu
         self.type = type_name
-        self.vel_y = 0 # Gravidade
+        self.vel_y = 0 
         
         if self.type == 'gato': base_size = (50, 40); base_speed = 3
         elif self.type == 'vaca': base_size = (70, 60); base_speed = 1
@@ -140,35 +141,45 @@ class Enemy(pygame.sprite.Sprite):
 
         self.image = self.image_left
         self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
+        self.rect.centerx = x
+        self.rect.bottom = y 
+        
         self.direction = -1 
 
     def update(self):
-        # Movimento Horizontal
+        # Movimento
         self.rect.x += self.speed * self.direction
         
-        # Gravidade (Exceto guarda-chuva que flutua)
+        # --- PATRULHA INTELIGENTE ---
+        # Se tiver uma plataforma designada e não for voador
+        if self.type != 'guarda_chuva' and self.platform:
+            # Se chegar na borda esquerda, vira pra direita
+            if self.rect.left < self.platform.rect.left:
+                self.rect.left = self.platform.rect.left
+                self.direction = 1
+            # Se chegar na borda direita, vira pra esquerda
+            elif self.rect.right > self.platform.rect.right:
+                self.rect.right = self.platform.rect.right
+                self.direction = -1
+        # ----------------------------
+
+        # Gravidade (Exceto guarda-chuva)
         if self.type != 'guarda_chuva':
             self.vel_y += GRAVITY
             self.rect.y += self.vel_y
-            
-            # Colisão com chão
             hits = pygame.sprite.spritecollide(self, self.game.platforms, False)
             if hits:
-                self.rect.bottom = hits[0].rect.top
-                self.vel_y = 0
+                if self.vel_y > 0:
+                    self.rect.bottom = hits[0].rect.top
+                    self.vel_y = 0
         else:
-            # Guarda-chuva flutua
             self.rect.y += random.choice([-2, 2])
 
-        # Vira a imagem
+        # Animação
         if self.direction == 1: self.image = self.image_right
         else: self.image = self.image_left
         
-        # Se cair do mundo, morre
-        if self.rect.top > HEIGHT:
-            self.kill()
+        if self.rect.top > HEIGHT: self.kill()
 
 class Explosion(pygame.sprite.Sprite):
     def __init__(self, center):
@@ -178,12 +189,16 @@ class Explosion(pygame.sprite.Sprite):
         exp_size = (int(80 * SCALE), int(80 * SCALE))
         try:
             sheet = pygame.image.load(path).convert_alpha()
-            fw = sheet.get_height() 
-            nf = sheet.get_width() // fw
-            for i in range(nf):
-                fr = sheet.subsurface((i * fw, 0, fw, fw))
-                fr = pygame.transform.scale(fr, exp_size)
-                self.frames.append(fr)
+            w, h = sheet.get_size()
+            if w > h: 
+                frame_width = h 
+                num_frames = w // h
+                for i in range(num_frames):
+                    frame = sheet.subsurface((i * frame_width, 0, frame_width, h))
+                    frame = pygame.transform.scale(frame, exp_size)
+                    self.frames.append(frame)
+            else:
+                self.frames.append(pygame.transform.scale(sheet, exp_size))
         except:
             img = pygame.Surface(exp_size); img.fill((255,100,0))
             self.frames.append(img)
@@ -192,10 +207,11 @@ class Explosion(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=center)
         self.frame_idx = 0
         self.last_update = pygame.time.get_ticks()
+        self.frame_rate = 60
 
     def update(self):
         now = pygame.time.get_ticks()
-        if now - self.last_update > 60:
+        if now - self.last_update > self.frame_rate:
             self.last_update = now
             self.frame_idx += 1
             if self.frame_idx < len(self.frames):
