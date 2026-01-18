@@ -6,7 +6,6 @@ import math
 from settings import *
 from sprites import Player, Platform, Enemy, Explosion, Flag, Bone
 from weapons import Projectile, WEAPONS_LIST, EnemyProjectile
-# Certifique-se que o arquivo level_manager.py existe na mesma pasta
 from level_manager import LevelManager
 
 GAME_FOLDER = os.path.dirname(__file__)
@@ -42,12 +41,14 @@ class Game:
         self.level = 1
         self.total_score = 0
         self.level_manager = LevelManager(self)
+        self.game_mode = 'campaign' # 'campaign' ou 'mission'
 
         self.bg_parts = []
         self.bg_width = WIDTH
         self.bg_scroll = 0
         self.load_backgrounds()
 
+        # ESTADOS: MENU, MISSION_SELECT, PLAYING
         self.state = 'MENU'
         self.running = True
 
@@ -78,6 +79,7 @@ class Game:
             self.bg_parts = []
 
     def setup_buttons(self):
+        # --- CONTROLES DE JOGO ---
         dpad_size = int(80 * SCALE)
         margin = int(20 * SCALE)
         base_y = HEIGHT - dpad_size - margin
@@ -104,6 +106,32 @@ class Game:
         self.btn_weapon = pygame.Rect(WIDTH - b_w - self.padding, int(self.padding * 0.2), b_w, b_h)
         self.btn_char = pygame.Rect(int(self.padding * 0.2), int(self.padding * 0.2), b_w, b_h)
 
+        # --- BOTÕES DO MENU PRINCIPAL ---
+        menu_btn_w = int(WIDTH * 0.4)
+        menu_btn_h = int(HEIGHT * 0.15)
+        center_x = WIDTH // 2 - menu_btn_w // 2
+        
+        self.btn_campanha = pygame.Rect(center_x, HEIGHT * 0.4, menu_btn_w, menu_btn_h)
+        self.btn_missao = pygame.Rect(center_x, HEIGHT * 0.6, menu_btn_w, menu_btn_h)
+
+        # --- BOTÕES DE SELEÇÃO DE FASE (1 a 5) ---
+        self.level_buttons = []
+        cols = 3
+        start_x = WIDTH * 0.2
+        start_y = HEIGHT * 0.3
+        gap_x = int(50 * SCALE)
+        btn_lvl_size = int(80 * SCALE)
+        
+        for i in range(5): # 5 Fases
+            row = i // cols
+            col = i % cols
+            x = start_x + col * (btn_lvl_size + gap_x)
+            y = start_y + row * (btn_lvl_size + gap_x)
+            rect = pygame.Rect(x, y, btn_lvl_size, btn_lvl_size)
+            self.level_buttons.append({'rect': rect, 'level': i+1})
+
+        self.btn_back = pygame.Rect(WIDTH - int(150*SCALE), int(20*SCALE), int(130*SCALE), int(50*SCALE))
+
     def new_game(self):
         self.all_sprites = pygame.sprite.Group()
         self.platforms = pygame.sprite.Group()
@@ -128,36 +156,97 @@ class Game:
             if self.state == 'MENU':
                 self.events_menu()
                 self.draw_menu()
+            elif self.state == 'MISSION_SELECT':
+                self.events_mission_select()
+                self.draw_mission_select()
             elif self.state == 'PLAYING':
                 self.events()
                 self.update()
                 self.draw()
 
+    # --- EVENTOS E DRAW DO MENU PRINCIPAL ---
     def events_menu(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            
             if event.type == pygame.FINGERDOWN or event.type == pygame.MOUSEBUTTONDOWN:
-                self.new_game()
+                if event.type == pygame.FINGERDOWN:
+                    x = int(event.x * WIDTH)
+                    y = int(event.y * HEIGHT)
+                else:
+                    x, y = event.pos
+
+                if self.btn_campanha.collidepoint(x, y):
+                    self.game_mode = 'campaign'
+                    self.level = 1
+                    self.total_score = 0
+                    self.new_game()
+                elif self.btn_missao.collidepoint(x, y):
+                    self.state = 'MISSION_SELECT'
 
     def draw_menu(self):
         self.screen.fill((100, 149, 237))
         
-        title = self.title_font.render("SUPER PUG GAME", True, (255, 255, 0))
-        start_txt = self.font.render("Toque para Iniciar", True, (255, 255, 255))
+        # Título com sombra
+        title_text = "SUPER PUG GAME"
+        t_w, t_h = self.title_font.size(title_text)
+        t_pos = (WIDTH//2 - t_w//2, HEIGHT * 0.15)
         
-        t_rect = title.get_rect(center=(WIDTH//2, HEIGHT//3))
-        s_rect = start_txt.get_rect(center=(WIDTH//2, HEIGHT//2))
+        shadow = self.title_font.render(title_text, True, (0, 0, 0))
+        self.screen.blit(shadow, (t_pos[0] + 5, t_pos[1] + 5))
         
-        shadow = self.title_font.render("SUPER PUG GAME", True, (0, 0, 0))
-        self.screen.blit(shadow, (t_rect.x + 5, t_rect.y + 5))
-        self.screen.blit(title, t_rect)
+        title = self.title_font.render(title_text, True, (255, 255, 0))
+        self.screen.blit(title, t_pos)
         
-        if pygame.time.get_ticks() % 1000 < 500:
-            self.screen.blit(start_txt, s_rect)
+        # Botões
+        self.draw_transparent_btn(self.btn_campanha, "MODO CAMPANHA", alpha=180, font_scale=1.2)
+        self.draw_transparent_btn(self.btn_missao, "SELEÇÃO DE FASE", alpha=180, font_scale=1.2)
             
         pygame.display.flip()
 
+    # --- EVENTOS E DRAW DA SELEÇÃO DE MISSÃO ---
+    def events_mission_select(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            
+            if event.type == pygame.FINGERDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                if event.type == pygame.FINGERDOWN:
+                    x = int(event.x * WIDTH)
+                    y = int(event.y * HEIGHT)
+                else:
+                    x, y = event.pos
+
+                # Botão Voltar
+                if self.btn_back.collidepoint(x, y):
+                    self.state = 'MENU'
+                    return
+
+                # Botões de Nível
+                for btn in self.level_buttons:
+                    if btn['rect'].collidepoint(x, y):
+                        self.game_mode = 'mission'
+                        self.level = btn['level']
+                        self.total_score = 0
+                        self.new_game()
+
+    def draw_mission_select(self):
+        self.screen.fill((50, 50, 80)) # Fundo mais escuro
+        
+        title = self.font.render("ESCOLHA UMA FASE:", True, (255, 255, 255))
+        self.screen.blit(title, (WIDTH * 0.1, HEIGHT * 0.15))
+        
+        self.draw_transparent_btn(self.btn_back, "VOLTAR", color=(255, 100, 100), alpha=200)
+
+        for btn in self.level_buttons:
+            rect = btn['rect']
+            lvl = btn['level']
+            self.draw_transparent_btn(rect, str(lvl), alpha=150)
+
+        pygame.display.flip()
+
+    # --- LÓGICA DO JOGO (PLAYING) ---
     def events(self):
         touch_left = False
         touch_right = False
@@ -238,14 +327,20 @@ class Game:
         hits = pygame.sprite.spritecollide(self.player, self.bones, True)
         for bone in hits: self.total_score += 50 
 
+        # --- LÓGICA DE VITÓRIA (BANDEIRA) ---
         if pygame.sprite.spritecollide(self.player, self.flags, False):
             self.total_score += 1000
-            self.level += 1 
-            self.show_level_screen()
-            self.new_game()
+            self.show_level_screen(f"NIVEL {self.level} COMPLETO!")
+            
+            if self.game_mode == 'campaign':
+                self.level += 1 
+                self.new_game()
+            else:
+                # Se for modo missão, volta para a seleção
+                self.state = 'MISSION_SELECT'
 
         if self.player.rect.top > HEIGHT: 
-            self.state = 'MENU'
+            self.game_over_logic()
 
         hits = pygame.sprite.spritecollide(self.player, self.bullets_enemy, True)
         if hits:
@@ -268,27 +363,31 @@ class Game:
             else: self.player.rect.x += int(20*SCALE)
 
         if self.player.hp <= 0:
-            self.level = 1 
+            self.game_over_logic()
+
+    def game_over_logic(self):
+        if self.game_mode == 'campaign':
+            self.level = 1
             self.total_score = 0
             self.state = 'MENU'
+        else:
+            # Em missão, apenas volta para seleção sem resetar tudo globalmente
+            self.state = 'MISSION_SELECT'
 
-    # Função Helper para desenhar botões transparentes
-    def draw_transparent_btn(self, rect, text, color=(255, 255, 255), alpha=80):
-        # Cria uma superfície temporária com suporte a transparência (SRCALPHA)
+    def draw_transparent_btn(self, rect, text, color=(255, 255, 255), alpha=80, font_scale=1.0):
         s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-        
-        # Preenche com preto transparente (alpha controla a opacidade)
         pygame.draw.rect(s, (0, 0, 0, alpha), s.get_rect(), border_radius=15)
-        
-        # Desenha a borda
         pygame.draw.rect(s, color, s.get_rect(), 2, border_radius=15)
         
-        # Desenha o texto centralizado
-        txt_surf = self.font.render(text, True, color)
+        # Ajuste de fonte opcional
+        if font_scale != 1.0:
+            cur_font = pygame.font.Font(None, int(30 * SCALE * font_scale))
+        else:
+            cur_font = self.font
+
+        txt_surf = cur_font.render(text, True, color)
         txt_rect = txt_surf.get_rect(center=(rect.width//2, rect.height//2))
         s.blit(txt_surf, txt_rect)
-        
-        # "Cola" a superfície transparente na tela principal
         self.screen.blit(s, rect.topleft)
 
     def draw(self):
@@ -312,51 +411,46 @@ class Game:
         
         # HUD
         s_txt = self.font.render(f"SCORE: {self.total_score}", True, (255, 255, 255))
-        l_txt = self.font.render(f"NIVEL: {self.level}", True, (255, 255, 0))
+        mode_txt = "CAMPAIGN" if self.game_mode == 'campaign' else "MISSION"
+        l_txt = self.font.render(f"LVL: {self.level} | {mode_txt}", True, (255, 255, 0))
+        
         self.screen.blit(s_txt, (WIDTH//2 - s_txt.get_width()//2, 10))
-        gap = s_txt.get_height() + 15 
+        gap = s_txt.get_height() + 5
         self.screen.blit(l_txt, (WIDTH//2 - l_txt.get_width()//2, 10 + gap))
 
-        # --- CONTROLES TRANSPARENTES (ALPHA 80) ---
-        # Definimos uma transparência padrão para não atrapalhar a visão
+        # CONTROLES
         BTN_ALPHA = 80 
-        
         self.draw_transparent_btn(self.btn_left, "<", alpha=BTN_ALPHA)  
         self.draw_transparent_btn(self.btn_right, ">", alpha=BTN_ALPHA)
         self.draw_transparent_btn(self.btn_up, "^", alpha=BTN_ALPHA)
 
-        # Botão Tiro (Redondo e Transparente)
+        # Botão Tiro
         visual_size = int(self.btn_size * 1.2) 
         surf = pygame.Surface((visual_size, visual_size), pygame.SRCALPHA)
         center = (visual_size // 2, visual_size // 2)
         radius = visual_size // 2
-        # Fundo preto transparente (alpha 80)
         pygame.draw.circle(surf, (0, 0, 0, BTN_ALPHA), center, radius)
-        # Borda branca
         pygame.draw.circle(surf, (255, 255, 255), center, radius, 2)
-        
         txt = self.font.render("TIRO", True, (255, 255, 255))
         txt_rect = txt.get_rect(center=center)
         surf.blit(txt, txt_rect)
         final_rect = surf.get_rect(center=self.btn_fire_center_point)
         self.screen.blit(surf, final_rect)
 
-        # --- MENUS SUPERIORES (Também transparentes agora) ---
-        # Reutilizamos a função draw_transparent_btn para manter o estilo "vidro"
+        # Menus Superiores
         w_name = WEAPONS_LIST[self.player.weapon_index]['name']
         self.draw_transparent_btn(self.btn_weapon, w_name, alpha=BTN_ALPHA)
         
         c_name = self.player.char_list[self.player.char_index].upper()
         self.draw_transparent_btn(self.btn_char, c_name, alpha=BTN_ALPHA)
 
-        # Barra de Vida
         self.draw_health_bar(self.screen, self.player.rect.x, self.player.rect.y - 15, self.player.hp)
         
         pygame.display.flip()
 
-    def show_level_screen(self):
+    def show_level_screen(self, text):
         self.screen.fill((0,0,0))
-        txt = self.font.render(f"NIVEL {self.level}", True, (255,255,255))
+        txt = self.font.render(text, True, (255,255,255))
         self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2))
         pygame.display.flip()
         pygame.time.delay(2000)
