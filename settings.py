@@ -20,7 +20,7 @@ TITLE = "Super Pug Game"
 FPS = 60
 
 # --- FÍSICA ---
-PLAYER_SPEED = 5 * SCALE
+PLAYER_SPEED = 8 * SCALE
 GRAVITY = 0.8 * SCALE
 JUMP_FORCE = -18 * SCALE
 

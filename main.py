@@ -5,8 +5,9 @@ import random
 import math 
 from settings import *
 from sprites import Player, Platform, Enemy, Explosion, Flag, Bone
-# Mantendo o seu sistema de armas
-from weapons import Projectile, WEAPONS_LIST
+from weapons import Projectile, WEAPONS_LIST, EnemyProjectile
+# Certifique-se que o arquivo level_manager.py existe na mesma pasta
+from level_manager import LevelManager
 
 GAME_FOLDER = os.path.dirname(__file__)
 ASSETS_FOLDER = os.path.join(GAME_FOLDER, 'assets')
@@ -14,10 +15,6 @@ ASSETS_FOLDER = os.path.join(GAME_FOLDER, 'assets')
 class Game:
     def __init__(self):
         pygame.init()
-        # Opcional: esconde o mouse para dar mais imersão no mobile
-        # pygame.mouse.set_visible(False)
-        
-        # Modo Fullscreen para mobile
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
@@ -26,8 +23,10 @@ class Game:
         font_size = int(25 * SCALE) 
         try:
             self.font = pygame.font.SysFont("Arial", font_size, bold=True)
+            self.title_font = pygame.font.SysFont("Arial", int(60 * SCALE), bold=True)
         except:
             self.font = pygame.font.Font(None, font_size)
+            self.title_font = pygame.font.Font(None, int(60 * SCALE))
             
         self.padding = int(120 * SCALE) 
         self.btn_size = int(HEIGHT * 0.18) 
@@ -39,72 +38,46 @@ class Game:
         self.last_shot_time = 0
         self.shoot_delay = 250 
 
-        # --- SISTEMA DE FASES ---
+        # --- SISTEMA DE JOGO ---
         self.level = 1
         self.total_score = 0
-        
-        # Inicializa variáveis de fundo
+        self.level_manager = LevelManager(self)
+
         self.bg_parts = []
         self.bg_width = WIDTH
         self.bg_scroll = 0
-        
-        # Carrega o fundo inicial
         self.load_backgrounds()
 
+        self.state = 'MENU'
         self.running = True
-        self.new_game()
 
     def load_backgrounds(self):
-        # --- ALTERAÇÃO AQUI: Nomenclatura Dinâmica ---
-        # Usa o self.level para decidir qual arquivo carregar (fundo1, fundo2, etc.)
-        fname = f'fundo{self.level}_completo.png'
+        fname = f'fundo{self.level}.png'
         path = os.path.join(ASSETS_FOLDER, fname)
-        
         self.bg_parts = []
-        
         try:
             if os.path.exists(path):
-                # 1. Carrega a imagem gigante
                 full_bg = pygame.image.load(path).convert()
-                
-                # 2. Calcula o tamanho das fatias (1/3 da imagem)
                 full_w = full_bg.get_width()
                 full_h = full_bg.get_height()
                 part_w = full_w // 3
                 
-                # 3. Cria as 3 partes (subsurfaces)
-                part_0 = full_bg.subsurface((0, 0, part_w, full_h))
-                part_1 = full_bg.subsurface((part_w, 0, part_w, full_h))
-                part_2 = full_bg.subsurface((part_w * 2, 0, part_w, full_h))
-                
-                # 4. Ajusta para a altura da tela mantendo proporção
                 scale_ratio = HEIGHT / full_h
                 new_w = int(part_w * scale_ratio)
                 new_h = int(full_h * scale_ratio)
                 
-                self.bg_parts = [
-                    pygame.transform.scale(part_0, (new_w, new_h)),
-                    pygame.transform.scale(part_1, (new_w, new_h)),
-                    pygame.transform.scale(part_2, (new_w, new_h))
-                ]
-                self.bg_width = new_w # Largura de uma parte na tela
-                print(f"Fundo carregado: {fname}")
+                for i in range(3):
+                    part = full_bg.subsurface((part_w * i, 0, part_w, full_h))
+                    self.bg_parts.append(pygame.transform.scale(part, (new_w, new_h)))
+                
+                self.bg_width = new_w 
             else:
-                print(f"AVISO: {fname} não encontrado em {ASSETS_FOLDER}")
-                # Aqui você pode adicionar um fallback para fundo1 se o 2 não existir
-                if self.level > 1:
-                     print("Tentando carregar fundo1_completo.png como emergência...")
-                     fallback_path = os.path.join(ASSETS_FOLDER, 'fundo1_completo.png')
-                     if os.path.exists(fallback_path):
-                         # (Repete a lógica de carregamento para o fallback se necessário)
-                         pass
-
+                pass 
         except Exception as e:
-            print(f"ERRO ao carregar fundo: {e}")
+            print(f"Erro BG: {e}")
             self.bg_parts = []
 
     def setup_buttons(self):
-        # --- DIRECIONAIS ---
         dpad_size = int(80 * SCALE)
         margin = int(20 * SCALE)
         base_y = HEIGHT - dpad_size - margin
@@ -112,119 +85,78 @@ class Game:
         hitbox_pad = int(20 * SCALE)
         
         self.btn_left = pygame.Rect(base_x - hitbox_pad, base_y - hitbox_pad, dpad_size + hitbox_pad*2, dpad_size + hitbox_pad*2)
-        
         x_right = base_x + dpad_size + 10
         self.btn_right = pygame.Rect(x_right - hitbox_pad, base_y - hitbox_pad, dpad_size + hitbox_pad*2, dpad_size + hitbox_pad*2)
-        
         x_up = base_x + (dpad_size // 2) + 5
         y_up = base_y - dpad_size - 10
         self.btn_up = pygame.Rect(x_up - hitbox_pad, y_up - hitbox_pad, dpad_size + hitbox_pad*2, dpad_size + hitbox_pad*2)
 
-        # --- BOTÃO TIRO ---
         offset_da_borda = int(100 * SCALE) 
         target_center_x = WIDTH - (self.btn_size // 2) - offset_da_borda
         target_center_y = HEIGHT - (self.btn_size // 2) - int(self.padding * 0.5)
         self.btn_fire_center_point = (target_center_x, target_center_y)
-
-        # Hitbox Grande (1.8x o tamanho base)
         hitbox_size = int(self.btn_size * 1.8) 
         self.btn_fire = pygame.Rect(0, 0, hitbox_size, hitbox_size)
         self.btn_fire.center = self.btn_fire_center_point
 
-        # MENUS
         b_w = int(self.btn_size * 1.5) 
         b_h = int(self.btn_size * 0.6)
         self.btn_weapon = pygame.Rect(WIDTH - b_w - self.padding, int(self.padding * 0.2), b_w, b_h)
         self.btn_char = pygame.Rect(int(self.padding * 0.2), int(self.padding * 0.2), b_w, b_h)
 
     def new_game(self):
-        self.phase_score = 0 
         self.all_sprites = pygame.sprite.Group()
         self.platforms = pygame.sprite.Group()
         self.enemies = pygame.sprite.Group()
         self.bullets = pygame.sprite.Group()
+        self.bullets_enemy = pygame.sprite.Group()
         self.flags = pygame.sprite.Group()
         self.bones = pygame.sprite.Group() 
         
-        # --- ALTERAÇÃO AQUI: Recarrega o fundo ao iniciar nova fase ---
         self.load_backgrounds()
-        
-        # Reinicia o scroll do fundo
         self.bg_scroll = 0
 
-        self.create_level_map(difficulty=self.level)
+        self.level_manager.create_level(difficulty=self.level)
+        
         self.player = Player(self)
         self.all_sprites.add(self.player)
-
-    def create_level_map(self, difficulty=1):
-        ground_y = HEIGHT - int(60 * SCALE)
-        # Chão inicial seguro
-        p = Platform(0, ground_y, int(WIDTH * 1.5), int(60 * SCALE))
-        self.all_sprites.add(p)
-        self.platforms.add(p)
-        
-        current_x = int(WIDTH * 1.5)
-        min_gap = int(50 * SCALE) + (difficulty * 5)
-        max_gap = int(120 * SCALE) + (difficulty * 15) 
-        if max_gap > 300 * SCALE: max_gap = 300 * SCALE
-
-        segments = 15 + (difficulty * 2) 
-        
-        for i in range(segments):
-            gap = random.randint(min_gap, max_gap)
-            current_x += gap
-            
-            plat_w = random.randint(int(200 * SCALE), int(500 * SCALE))
-            height_variance = int(50 * SCALE) * difficulty
-            if height_variance > 250 * SCALE: height_variance = 250 * SCALE
-            
-            if random.random() > 0.3:
-                plat_y = ground_y
-            else:
-                plat_y = ground_y - random.randint(int(50*SCALE), height_variance)
-            
-            p = Platform(current_x, plat_y, plat_w, int(60 * SCALE))
-            self.all_sprites.add(p)
-            self.platforms.add(p)
-            
-            # Gera Ossos
-            if random.random() > 0.5:
-                num_bones = random.randint(1, 3)
-                start_bone_x = current_x + int(50*SCALE)
-                for b in range(num_bones):
-                    bx = start_bone_x + (b * int(50*SCALE))
-                    if bx < current_x + plat_w - int(50*SCALE): 
-                        bone = Bone(bx, plat_y)
-                        self.all_sprites.add(bone)
-                        self.bones.add(bone)
-
-            # Gera Inimigos
-            if random.random() > 0.4:
-                etype = random.choice(['gato', 'vaca', 'guarda_chuva'])
-                ex = current_x + plat_w // 2
-                ey = plat_y - int(150 * SCALE)
-                e = Enemy(ex, ey, etype, self, platform=p)
-                self.all_sprites.add(e)
-                self.enemies.add(e)
-            
-            current_x += plat_w
-
-        # Plataforma Final
-        current_x += int(150 * SCALE)
-        final_plat = Platform(current_x, ground_y, int(500 * SCALE), int(60 * SCALE))
-        self.all_sprites.add(final_plat)
-        self.platforms.add(final_plat)
-        
-        flag = Flag(current_x + int(400 * SCALE), ground_y)
-        self.all_sprites.add(flag)
-        self.flags.add(flag)
+        self.state = 'PLAYING'
 
     def run(self):
         while self.running:
             self.clock.tick(FPS)
-            self.events()
-            self.update()
-            self.draw()
+            if self.state == 'MENU':
+                self.events_menu()
+                self.draw_menu()
+            elif self.state == 'PLAYING':
+                self.events()
+                self.update()
+                self.draw()
+
+    def events_menu(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            if event.type == pygame.FINGERDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                self.new_game()
+
+    def draw_menu(self):
+        self.screen.fill((100, 149, 237))
+        
+        title = self.title_font.render("SUPER PUG GAME", True, (255, 255, 0))
+        start_txt = self.font.render("Toque para Iniciar", True, (255, 255, 255))
+        
+        t_rect = title.get_rect(center=(WIDTH//2, HEIGHT//3))
+        s_rect = start_txt.get_rect(center=(WIDTH//2, HEIGHT//2))
+        
+        shadow = self.title_font.render("SUPER PUG GAME", True, (0, 0, 0))
+        self.screen.blit(shadow, (t_rect.x + 5, t_rect.y + 5))
+        self.screen.blit(title, t_rect)
+        
+        if pygame.time.get_ticks() % 1000 < 500:
+            self.screen.blit(start_txt, s_rect)
+            
+        pygame.display.flip()
 
     def events(self):
         touch_left = False
@@ -236,13 +168,11 @@ class Game:
             if event.type == pygame.QUIT:
                 self.running = False
             
-            # Lógica Multitouch
             elif event.type == pygame.FINGERDOWN or event.type == pygame.FINGERMOTION:
                 x = int(event.x * WIDTH)
                 y = int(event.y * HEIGHT)
                 self.fingers[event.finger_id] = (x, y)
                 
-                # Apenas no toque inicial verifica botões de clique único (menus)
                 if event.type == pygame.FINGERDOWN:
                     if self.btn_weapon.collidepoint((x, y)):
                         self.player.weapon_index = (self.player.weapon_index + 1) % len(WEAPONS_LIST)
@@ -253,19 +183,16 @@ class Game:
                 if event.finger_id in self.fingers:
                     del self.fingers[event.finger_id]
 
-            # Fallback para Mouse/Teclado (Testes no PC)
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = event.pos
                 if self.btn_up.collidepoint((mx, my)): self.player.jump()
 
-        # Verifica posições dos dedos nos botões
         for finger_pos in self.fingers.values():
             if self.btn_left.collidepoint(finger_pos): touch_left = True
             if self.btn_right.collidepoint(finger_pos): touch_right = True
             if self.btn_up.collidepoint(finger_pos): touch_up = True
             if self.btn_fire.collidepoint(finger_pos): holding_fire = True
         
-        # Se não tiver toque, verifica mouse/teclado
         if not self.fingers:
             mouse_pressed = pygame.mouse.get_pressed()[0]
             if mouse_pressed:
@@ -299,33 +226,31 @@ class Game:
     def update(self):
         self.all_sprites.update()
         
-        # --- CÂMERA E SCROLL DO FUNDO ---
         if self.player.rect.right >= WIDTH * 0.4:
             scroll = self.player.rect.right - (WIDTH * 0.4)
             self.player.rect.right = WIDTH * 0.4 
-            
-            # Atualiza o quanto o fundo andou
             self.bg_scroll += scroll 
             
             for sprite in self.all_sprites:
                 if sprite != self.player:
                     sprite.rect.x -= scroll
 
-        # Coleta de Ossos
         hits = pygame.sprite.spritecollide(self.player, self.bones, True)
         for bone in hits: self.total_score += 50 
 
-        # Chegada na Bandeira (Próxima Fase)
         if pygame.sprite.spritecollide(self.player, self.flags, False):
             self.total_score += 1000
             self.level += 1 
             self.show_level_screen()
             self.new_game()
 
-        # Morte por queda
-        if self.player.rect.top > HEIGHT: self.new_game()
+        if self.player.rect.top > HEIGHT: 
+            self.state = 'MENU'
 
-        # Tiros x Inimigos
+        hits = pygame.sprite.spritecollide(self.player, self.bullets_enemy, True)
+        if hits:
+            self.player.hp -= 10
+
         hits = pygame.sprite.groupcollide(self.enemies, self.bullets, False, True)
         for enemy, bullets_list in hits.items():
             for b in bullets_list:
@@ -336,18 +261,98 @@ class Game:
                     enemy.kill()
                     self.total_score += 100 
 
-        # Player x Inimigos
         hits = pygame.sprite.spritecollide(self.player, self.enemies, False)
         if hits:
             self.player.hp -= 1
-            # Empurrãozinho para trás ao tomar dano
             if self.player.rect.x < hits[0].rect.x: self.player.rect.x -= int(20*SCALE)
             else: self.player.rect.x += int(20*SCALE)
 
         if self.player.hp <= 0:
             self.level = 1 
             self.total_score = 0
-            self.new_game()
+            self.state = 'MENU'
+
+    # Função Helper para desenhar botões transparentes
+    def draw_transparent_btn(self, rect, text, color=(255, 255, 255), alpha=80):
+        # Cria uma superfície temporária com suporte a transparência (SRCALPHA)
+        s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        
+        # Preenche com preto transparente (alpha controla a opacidade)
+        pygame.draw.rect(s, (0, 0, 0, alpha), s.get_rect(), border_radius=15)
+        
+        # Desenha a borda
+        pygame.draw.rect(s, color, s.get_rect(), 2, border_radius=15)
+        
+        # Desenha o texto centralizado
+        txt_surf = self.font.render(text, True, color)
+        txt_rect = txt_surf.get_rect(center=(rect.width//2, rect.height//2))
+        s.blit(txt_surf, txt_rect)
+        
+        # "Cola" a superfície transparente na tela principal
+        self.screen.blit(s, rect.topleft)
+
+    def draw(self):
+        self.screen.fill((135, 206, 235))
+        
+        if self.bg_parts:
+            part_w = self.bg_width
+            start_scroll = self.bg_scroll
+            first_tile_idx = int(start_scroll // part_w)
+            tile_offset = start_scroll % part_w
+            draw_x = -tile_offset
+            current_idx = first_tile_idx
+            
+            while draw_x < WIDTH:
+                img_idx = current_idx % 3
+                self.screen.blit(self.bg_parts[img_idx], (draw_x, 0))
+                draw_x += part_w
+                current_idx += 1
+        
+        self.all_sprites.draw(self.screen)
+        
+        # HUD
+        s_txt = self.font.render(f"SCORE: {self.total_score}", True, (255, 255, 255))
+        l_txt = self.font.render(f"NIVEL: {self.level}", True, (255, 255, 0))
+        self.screen.blit(s_txt, (WIDTH//2 - s_txt.get_width()//2, 10))
+        gap = s_txt.get_height() + 15 
+        self.screen.blit(l_txt, (WIDTH//2 - l_txt.get_width()//2, 10 + gap))
+
+        # --- CONTROLES TRANSPARENTES (ALPHA 80) ---
+        # Definimos uma transparência padrão para não atrapalhar a visão
+        BTN_ALPHA = 80 
+        
+        self.draw_transparent_btn(self.btn_left, "<", alpha=BTN_ALPHA)  
+        self.draw_transparent_btn(self.btn_right, ">", alpha=BTN_ALPHA)
+        self.draw_transparent_btn(self.btn_up, "^", alpha=BTN_ALPHA)
+
+        # Botão Tiro (Redondo e Transparente)
+        visual_size = int(self.btn_size * 1.2) 
+        surf = pygame.Surface((visual_size, visual_size), pygame.SRCALPHA)
+        center = (visual_size // 2, visual_size // 2)
+        radius = visual_size // 2
+        # Fundo preto transparente (alpha 80)
+        pygame.draw.circle(surf, (0, 0, 0, BTN_ALPHA), center, radius)
+        # Borda branca
+        pygame.draw.circle(surf, (255, 255, 255), center, radius, 2)
+        
+        txt = self.font.render("TIRO", True, (255, 255, 255))
+        txt_rect = txt.get_rect(center=center)
+        surf.blit(txt, txt_rect)
+        final_rect = surf.get_rect(center=self.btn_fire_center_point)
+        self.screen.blit(surf, final_rect)
+
+        # --- MENUS SUPERIORES (Também transparentes agora) ---
+        # Reutilizamos a função draw_transparent_btn para manter o estilo "vidro"
+        w_name = WEAPONS_LIST[self.player.weapon_index]['name']
+        self.draw_transparent_btn(self.btn_weapon, w_name, alpha=BTN_ALPHA)
+        
+        c_name = self.player.char_list[self.player.char_index].upper()
+        self.draw_transparent_btn(self.btn_char, c_name, alpha=BTN_ALPHA)
+
+        # Barra de Vida
+        self.draw_health_bar(self.screen, self.player.rect.x, self.player.rect.y - 15, self.player.hp)
+        
+        pygame.display.flip()
 
     def show_level_screen(self):
         self.screen.fill((0,0,0))
@@ -355,16 +360,7 @@ class Game:
         self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2))
         pygame.display.flip()
         pygame.time.delay(2000)
-
-    def draw_transparent_btn(self, rect, text, color=(255, 255, 255)):
-        s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-        pygame.draw.rect(s, (0, 0, 0, 150), s.get_rect(), border_radius=15)
-        pygame.draw.rect(s, color, s.get_rect(), 2, border_radius=15)
-        txt_surf = self.font.render(text, True, color)
-        txt_rect = txt_surf.get_rect(center=(rect.width//2, rect.height//2))
-        s.blit(txt_surf, txt_rect)
-        self.screen.blit(s, rect.topleft)
-
+    
     def draw_health_bar(self, surface, x, y, pct):
         if pct < 0: pct = 0
         BAR_LENGTH = int(80 * SCALE)
@@ -373,84 +369,6 @@ class Game:
         col = (0, 255, 0) if pct >= 30 else (255, 0, 0)
         pygame.draw.rect(surface, col, (x, y, fill, BAR_HEIGHT))
         pygame.draw.rect(surface, (255, 255, 255), (x, y, BAR_LENGTH, BAR_HEIGHT), 2)
-
-    def draw(self):
-        # 1. LIMPEZA DA TELA (Corrige o bug visual/rastro)
-        self.screen.fill((135, 206, 235))
-        
-        # 2. DESENHO DO FUNDO INFINITO
-        if self.bg_parts:
-            # Pega a largura de uma fatia
-            part_w = self.bg_width
-            
-            # Calcula o deslocamento inicial baseado no scroll
-            start_scroll = self.bg_scroll
-            
-            # Qual é o índice da primeira imagem que deve aparecer?
-            first_tile_idx = int(start_scroll // part_w)
-            
-            # Onde ela começa na tela (offset negativo para scroll suave)
-            tile_offset = start_scroll % part_w
-            draw_x = -tile_offset
-            
-            current_idx = first_tile_idx
-            
-            # LOOP MÁGICO: Preenche a tela inteira, não importa a largura
-            while draw_x < WIDTH:
-                # Usa % 3 para ciclar entre as imagens 0, 1, 2
-                img_idx = current_idx % 3
-                
-                # Desenha a parte atual
-                self.screen.blit(self.bg_parts[img_idx], (draw_x, 0))
-                
-                # Prepara para a próxima
-                draw_x += part_w
-                current_idx += 1
-        else:
-            # Fallback (caso a imagem não exista)
-            self.screen.fill((135, 206, 235))
-            
-        # 3. Desenha Sprites
-        self.all_sprites.draw(self.screen)
-        
-        # --- HUD E INTERFACE ---
-        s_txt = self.font.render(f"SCORE: {self.total_score}", True, (255, 255, 255))
-        l_txt = self.font.render(f"NIVEL: {self.level}", True, (255, 255, 0))
-        self.screen.blit(s_txt, (WIDTH//2 - s_txt.get_width()//2, 10))
-        gap = s_txt.get_height() + 15 
-        self.screen.blit(l_txt, (WIDTH//2 - l_txt.get_width()//2, 10 + gap))
-
-        # Botões Direcionais
-        self.draw_transparent_btn(self.btn_left, "<")
-        self.draw_transparent_btn(self.btn_right, ">")
-        self.draw_transparent_btn(self.btn_up, "^")
-
-        # Botão Tiro
-        visual_size = int(self.btn_size * 1.2) 
-        surf = pygame.Surface((visual_size, visual_size), pygame.SRCALPHA)
-        center = (visual_size // 2, visual_size // 2)
-        radius = visual_size // 2
-        pygame.draw.circle(surf, (0, 0, 0, 150), center, radius)
-        pygame.draw.circle(surf, (255, 255, 255), center, radius, 2)
-        txt = self.font.render("TIRO", True, (255, 255, 255))
-        txt_rect = txt.get_rect(center=center)
-        surf.blit(txt, txt_rect)
-        final_rect = surf.get_rect(center=self.btn_fire_center_point)
-        self.screen.blit(surf, final_rect)
-
-        # Menus
-        pygame.draw.rect(self.screen, (50, 50, 50), self.btn_weapon, border_radius=10)
-        w_name = WEAPONS_LIST[self.player.weapon_index]['name']
-        self.screen.blit(self.font.render(w_name, True, (255, 255, 255)), (self.btn_weapon.x + 10, self.btn_weapon.y + 10))
-        
-        pygame.draw.rect(self.screen, (50, 100, 50), self.btn_char, border_radius=10)
-        c_name = self.player.char_list[self.player.char_index].upper()
-        self.screen.blit(self.font.render(c_name, True, (255, 255, 255)), (self.btn_char.x + 10, self.btn_char.y + 10))
-
-        # Barra de Vida
-        self.draw_health_bar(self.screen, self.player.rect.x, self.player.rect.y - 15, self.player.hp)
-        
-        pygame.display.flip()
 
 if __name__ == "__main__":
     g = Game()

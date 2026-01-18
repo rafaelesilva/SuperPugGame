@@ -3,6 +3,8 @@ import os
 import random
 import math 
 from settings import *
+# Importa a caca da pomba (certifique-se que weapons.py foi atualizado)
+from weapons import EnemyProjectile
 
 GAME_FOLDER = os.path.dirname(__file__)
 ASSETS_FOLDER = os.path.join(GAME_FOLDER, 'assets')
@@ -216,10 +218,7 @@ class Bone(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
         path = os.path.join(ASSETS_FOLDER, 'ossinho.png')
-        # --- MUDANÇA 1: REDUÇÃO AGRESSIVA DO TAMANHO ---
-        # Mudamos de 25 para 15. Agora deve ficar bem pequeno.
         self.size = (int(15 * SCALE), int(15 * SCALE))
-        # -----------------------------------------------
         try:
             self.image = pygame.image.load(path).convert_alpha()
             self.image = pygame.transform.scale(self.image, self.size)
@@ -237,3 +236,55 @@ class Bone(pygame.sprite.Sprite):
     def update(self):
         self.float_offset += 0.1
         self.rect.y = self.y_start + int(5 * math.sin(self.float_offset))
+
+class Pigeon(pygame.sprite.Sprite):
+    def __init__(self, x, y, game):
+        super().__init__()
+        self.game = game
+        self.size = (int(60 * SCALE), int(40 * SCALE))
+        self.hp = 15
+        
+        path = os.path.join(ASSETS_FOLDER, 'pomba.png')
+        try:
+            img = pygame.image.load(path).convert_alpha()
+            self.image_orig = pygame.transform.scale(img, self.size)
+        except:
+            self.image_orig = pygame.Surface(self.size)
+            self.image_orig.fill((150, 150, 150))
+            # Asa simplificada para fallback visual
+            pygame.draw.rect(self.image_orig, (200, 200, 200), (10, 10, 30, 10))
+
+        self.image = self.image_orig
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        
+        self.speed = 4 * SCALE
+        self.direction = -1 
+        
+        self.last_shot = 0
+        self.shot_delay = 2000
+
+    def update(self):
+        # Movimento Horizontal
+        self.rect.x += self.speed * self.direction
+        
+        if self.rect.right < 0:
+            self.direction = 1
+            self.image = pygame.transform.flip(self.image_orig, True, False)
+        elif self.rect.left > WIDTH + 100:
+            self.direction = -1
+            self.image = self.image_orig
+
+        # Movimento Vertical Ondulatório
+        self.rect.y += math.sin(pygame.time.get_ticks() * 0.005) * 2
+
+        # Lógica de Tiro (Cagar)
+        now = pygame.time.get_ticks()
+        if 0 < self.rect.centerx < WIDTH:
+            if now - self.last_shot > self.shot_delay:
+                self.last_shot = now
+                if random.random() > 0.3:
+                    poop = EnemyProjectile(self.rect.centerx, self.rect.bottom)
+                    self.game.all_sprites.add(poop)
+                    self.game.bullets_enemy.add(poop)
