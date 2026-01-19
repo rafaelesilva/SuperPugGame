@@ -15,66 +15,148 @@ class Player(pygame.sprite.Sprite):
         self.facing_right = True
         self.char_list = ['dino', 'bob', 'nina'] 
         self.char_index = 0
-        self.images_db = {} 
+        
         self.hp = 100
         self.max_hp = 100
         self.size = (int(60 * SCALE), int(50 * SCALE))
+
+        # --- SISTEMA DE ANIMAÇÃO ---
+        self.animation_db = {} # Dicionário que guarda LISTAS de frames
+        self.frame_index = 0   # Qual frame da lista estamos mostrando agora
+        self.animation_speed = 150 # Velocidade da troca em milissegundos (quanto menor, mais rápido)
+        self.last_frame_update = pygame.time.get_ticks()
+        
+        # Tenta carregar 4 frames de caminhada para cada personagem
+        num_frames_to_load = 4 
         
         for name in self.char_list:
-            path = os.path.join(ASSETS_FOLDER, f'{name}.png')
-            try:
-                img = pygame.image.load(path).convert_alpha()
-                img = pygame.transform.scale(img, self.size)
-                self.images_db[name] = img
-            except:
-                surf = pygame.Surface(self.size)
-                surf.fill((255, 255, 0))
-                self.images_db[name] = surf
+            frames = []
+            loaded_walking = False
+            
+            # 1. Tenta carregar a sequência: nome_walk1.png, nome_walk2.png, etc.
+            for i in range(1, num_frames_to_load + 1):
+                path = os.path.join(ASSETS_FOLDER, f'{name}_walk{i}.png')
+                if os.path.exists(path):
+                    try:
+                        img = pygame.image.load(path).convert_alpha()
+                        img = pygame.transform.scale(img, self.size)
+                        frames.append(img)
+                        loaded_walking = True
+                    except:
+                        print(f"Erro ao carregar frame: {path}")
 
-        self.update_image()
+            # 2. Fallback: Se não achou nenhuma imagem de 'walk', carrega a estática antiga
+            if not frames or not loaded_walking:
+                print(f"Aviso: Animação não encontrada para {name}. Usando imagem estática.")
+                frames = [] # Garante lista limpa
+                path_static = os.path.join(ASSETS_FOLDER, f'{name}.png')
+                try:
+                    img = pygame.image.load(path_static).convert_alpha()
+                    img = pygame.transform.scale(img, self.size)
+                    # Adiciona a mesma imagem várias vezes para a lista não ficar vazia
+                    for _ in range(num_frames_to_load):
+                        frames.append(img)
+                except:
+                     # Último caso: quadrado roxo se não tiver NADA
+                    surf = pygame.Surface(self.size)
+                    surf.fill((255, 0, 255)) 
+                    for _ in range(num_frames_to_load):
+                        frames.append(surf)
+
+            self.animation_db[name] = frames
+
+        # Define a imagem inicial
+        self.image_orig = self.animation_db[self.char_list[self.char_index]][0]
+        self.image = self.image_orig
         self.rect = self.image.get_rect()
         self.rect.center = (WIDTH / 4, HEIGHT / 2)
+        
         self.vel_y = 0
         self.on_ground = False
+        self.is_moving = False # Nova flag para saber se está andando
         self.weapon_index = 0
 
     def next_character(self):
         self.char_index = (self.char_index + 1) % len(self.char_list)
-        self.update_image()
+        # Reseta o frame ao trocar de personagem
+        self.frame_index = 0
+        self.update_image_frame()
 
-    def update_image(self):
+    # Nova função para pegar o frame correto e espelhar se necessário
+    def update_image_frame(self):
         name = self.char_list[self.char_index]
-        self.image_orig = self.images_db[name]
-        self.image = self.image_orig if self.facing_right else pygame.transform.flip(self.image_orig, True, False)
+        # Pega o frame atual da lista usando o índice
+        current_frame = self.animation_db[name][self.frame_index]
+        
+        if self.facing_right:
+            self.image = current_frame
+        else:
+            self.image = pygame.transform.flip(current_frame, True, False)
+
+    # Função que roda todo loop para calcular a animação
+    def animate(self):
+        now = pygame.time.get_ticks()
+        
+        # Só anima se estiver se movendo E no chão
+        if self.is_moving and self.on_ground:
+            if now - self.last_frame_update > self.animation_speed:
+                self.last_frame_update = now
+                # Avança para o próximo frame, e volta pro 0 se chegar no fim da lista (loop)
+                name = self.char_list[self.char_index]
+                total_frames = len(self.animation_db[name])
+                self.frame_index = (self.frame_index + 1) % total_frames
+                self.update_image_frame()
+        else:
+            # Se parou ou pulou, volta para o frame 0 (pose parada)
+            if self.frame_index != 0:
+                self.frame_index = 0
+                self.update_image_frame()
 
     def update_touch(self, left, right):
+        # Reseta a flag de movimento
+        self.is_moving = False
+        
         if left:
             self.rect.x -= PLAYER_SPEED
             self.facing_right = False
-            self.image = pygame.transform.flip(self.image_orig, True, False)
+            self.is_moving = True
         if right:
             self.rect.x += PLAYER_SPEED
             self.facing_right = True
-            self.image = self.image_orig
+            self.is_moving = True
+            
+        # Se mudou de direção instantaneamente, atualiza a imagem já
+        if (left or right) and self.on_ground:
+             self.update_image_frame()
 
     def update(self):
         self.vel_y += GRAVITY
         self.rect.y += self.vel_y
         
+        # Reseta a flag antes da colisão
+        self.on_ground = False 
         hits = pygame.sprite.spritecollide(self, self.game.platforms, False)
         if hits:
-            if self.vel_y > 0:
+            # Verifica se está caindo sobre a plataforma (não batendo de baixo para cima)
+            if self.vel_y >= 0 and self.rect.bottom < hits[0].rect.bottom + 10: 
                 self.rect.bottom = hits[0].rect.top
                 self.vel_y = 0
                 self.on_ground = True
         
         if self.rect.left < 0: self.rect.left = 0
+        
+        # Chama a lógica de animação
+        self.animate()
 
     def jump(self):
         if self.on_ground:
             self.vel_y = JUMP_FORCE
             self.on_ground = False
+            # Opcional: Ao pular, força o frame 0 ou um frame de pulo específico
+            self.frame_index = 0
+            self.update_image_frame()
 
+# --- DEMAIS CLASSES PERMANECEM IGUAIS ---
 class Platform(pygame.sprite.Sprite):
     def __init__(self, x, y, w, h, texture_name='chao.png'):
         super().__init__()
@@ -126,7 +208,6 @@ class Enemy(pygame.sprite.Sprite):
         self.type = type_name
         self.vel_y = 0 
         
-        # Configuração de tamanho e velocidade por tipo
         if self.type == 'gato': base_size = (50, 40); base_speed = 3
         elif self.type == 'vaca': base_size = (70, 60); base_speed = 1
         elif self.type == 'caranguejo': base_size = (45, 35); base_speed = 2
@@ -139,44 +220,31 @@ class Enemy(pygame.sprite.Sprite):
         path = os.path.join(ASSETS_FOLDER, f'{self.type}.png')
         try:
             img = pygame.image.load(path).convert_alpha()
-            
-            # --- CORREÇÃO AQUI ---
-            # Consideramos que a imagem original (PNG) olha para a DIREITA.
-            # Então self.image_right recebe a imagem original.
             self.image_right = pygame.transform.scale(img, self.size)
-            
-            # E self.image_left recebe o FLIP (espelhamento) dela.
             self.image_left = pygame.transform.flip(self.image_right, True, False)
-            
         except:
-            # Fallback visual
             surf = pygame.Surface(self.size)
             surf.fill((255, 0, 0))
             self.image_left = surf
             self.image_right = surf
 
-        # Começa indo para a esquerda, então usa image_left
         self.direction = -1 
         self.image = self.image_left
-        
         self.rect = self.image.get_rect()
         self.rect.centerx = x
         self.rect.bottom = y 
 
     def update(self):
-        # Movimento lateral
         self.rect.x += self.speed * self.direction
         
-        # Lógica de patrulha na plataforma
         if self.type != 'guarda_chuva' and self.platform:
             if self.rect.left < self.platform.rect.left:
                 self.rect.left = self.platform.rect.left
-                self.direction = 1 # Bateu na esquerda, vira para Direita
+                self.direction = 1
             elif self.rect.right > self.platform.rect.right:
                 self.rect.right = self.platform.rect.right
-                self.direction = -1 # Bateu na direita, vira para Esquerda
+                self.direction = -1
 
-        # Gravidade
         if self.type != 'guarda_chuva':
             self.vel_y += GRAVITY
             self.rect.y += self.vel_y
@@ -188,11 +256,8 @@ class Enemy(pygame.sprite.Sprite):
         else:
             self.rect.y += random.choice([-2, 2])
 
-        # Atualiza a imagem baseada na direção atual
-        if self.direction == 1:
-            self.image = self.image_right # Indo p/ direita, usa img direita
-        else:
-            self.image = self.image_left  # Indo p/ esquerda, usa img esquerda
+        if self.direction == 1: self.image = self.image_right
+        else: self.image = self.image_left
         
         if self.rect.top > HEIGHT: self.kill()
 
