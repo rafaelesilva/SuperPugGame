@@ -3,7 +3,6 @@ import os
 import random
 import math 
 from settings import *
-# Importa a caca da pomba (certifique-se que weapons.py foi atualizado)
 from weapons import EnemyProjectile
 
 GAME_FOLDER = os.path.dirname(__file__)
@@ -77,20 +76,33 @@ class Player(pygame.sprite.Sprite):
             self.on_ground = False
 
 class Platform(pygame.sprite.Sprite):
-    def __init__(self, x, y, w, h):
+    def __init__(self, x, y, w, h, texture_name='chao.png'):
         super().__init__()
         self.image = pygame.Surface((w, h))
-        path = os.path.join(ASSETS_FOLDER, 'chao.png')
+        path = os.path.join(ASSETS_FOLDER, texture_name)
+        
         try:
             tile_img = pygame.image.load(path).convert_alpha()
+            # Ajusta o tamanho do "azulejo"
             tile_size = int(50 * SCALE)
             tile_img = pygame.transform.scale(tile_img, (tile_size, tile_size))
+            
+            # Desenha o chão repetido (tiling)
             for i in range(0, w, tile_size):
                 self.image.blit(tile_img, (i, 0))
+                
+                # Desenha a parte de baixo (terra) se a plataforma for alta
                 if h > tile_size:
+                    # Se for Copacabana (chao2), a terra é cor de areia
+                    if 'chao2' in texture_name:
+                        fill_color = (194, 178, 128) # Areia
+                    else:
+                        fill_color = (101, 67, 33)   # Terra Marrom
+                        
                     brown = pygame.Rect(i, tile_size, tile_size, h - tile_size)
-                    pygame.draw.rect(self.image, (101, 67, 33), brown)
+                    pygame.draw.rect(self.image, fill_color, brown)
         except:
+            # Fallback (caso a imagem falhe)
             self.image.fill((101, 67, 33))
             pygame.draw.rect(self.image, (0, 255, 0), (0, 0, w, int(10*SCALE)))
 
@@ -251,7 +263,6 @@ class Pigeon(pygame.sprite.Sprite):
         except:
             self.image_orig = pygame.Surface(self.size)
             self.image_orig.fill((150, 150, 150))
-            # Asa simplificada para fallback visual
             pygame.draw.rect(self.image_orig, (200, 200, 200), (10, 10, 30, 10))
 
         self.image = self.image_orig
@@ -266,7 +277,6 @@ class Pigeon(pygame.sprite.Sprite):
         self.shot_delay = 2000
 
     def update(self):
-        # Movimento Horizontal
         self.rect.x += self.speed * self.direction
         
         if self.rect.right < 0:
@@ -276,10 +286,8 @@ class Pigeon(pygame.sprite.Sprite):
             self.direction = -1
             self.image = self.image_orig
 
-        # Movimento Vertical Ondulatório
         self.rect.y += math.sin(pygame.time.get_ticks() * 0.005) * 2
 
-        # Lógica de Tiro (Cagar)
         now = pygame.time.get_ticks()
         if 0 < self.rect.centerx < WIDTH:
             if now - self.last_shot > self.shot_delay:
