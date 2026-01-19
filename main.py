@@ -32,6 +32,17 @@ class Game:
         
         self.setup_buttons()
         
+        # --- CARREGAR IMAGEM DO MENU ---
+        # Tenta carregar a imagem estilo Master System
+        self.menu_bg_image = None
+        try:
+            bg_path = os.path.join(ASSETS_FOLDER, 'menu_bg.png')
+            if os.path.exists(bg_path):
+                img = pygame.image.load(bg_path).convert()
+                self.menu_bg_image = pygame.transform.scale(img, (WIDTH, HEIGHT))
+        except Exception as e:
+            print(f"Erro ao carregar menu_bg: {e}")
+        
         # --- MULTI-TOUCH ---
         self.fingers = {} 
         self.last_shot_time = 0
@@ -48,7 +59,6 @@ class Game:
         self.bg_scroll = 0
         self.load_backgrounds()
 
-        # ESTADOS: MENU, MISSION_SELECT, PLAYING
         self.state = 'MENU'
         self.running = True
 
@@ -107,12 +117,14 @@ class Game:
         self.btn_char = pygame.Rect(int(self.padding * 0.2), int(self.padding * 0.2), b_w, b_h)
 
         # --- BOTÕES DO MENU PRINCIPAL ---
-        menu_btn_w = int(WIDTH * 0.4)
-        menu_btn_h = int(HEIGHT * 0.15)
+        # Ajustei a posição para não tapar a arte (jogando mais para baixo)
+        menu_btn_w = int(WIDTH * 0.35)
+        menu_btn_h = int(HEIGHT * 0.12)
         center_x = WIDTH // 2 - menu_btn_w // 2
         
-        self.btn_campanha = pygame.Rect(center_x, HEIGHT * 0.4, menu_btn_w, menu_btn_h)
-        self.btn_missao = pygame.Rect(center_x, HEIGHT * 0.6, menu_btn_w, menu_btn_h)
+        # Posições ajustadas para o estilo capa de jogo (botões na parte inferior ou meio)
+        self.btn_campanha = pygame.Rect(center_x, HEIGHT * 0.65, menu_btn_w, menu_btn_h)
+        self.btn_missao = pygame.Rect(center_x, HEIGHT * 0.80, menu_btn_w, menu_btn_h)
 
         # --- BOTÕES DE SELEÇÃO DE FASE (1 a 5) ---
         self.level_buttons = []
@@ -122,7 +134,7 @@ class Game:
         gap_x = int(50 * SCALE)
         btn_lvl_size = int(80 * SCALE)
         
-        for i in range(5): # 5 Fases
+        for i in range(5): 
             row = i // cols
             col = i % cols
             x = start_x + col * (btn_lvl_size + gap_x)
@@ -164,7 +176,6 @@ class Game:
                 self.update()
                 self.draw()
 
-    # --- EVENTOS E DRAW DO MENU PRINCIPAL ---
     def events_menu(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -186,26 +197,28 @@ class Game:
                     self.state = 'MISSION_SELECT'
 
     def draw_menu(self):
-        self.screen.fill((100, 149, 237))
+        # 1. Desenha o fundo
+        if self.menu_bg_image:
+            self.screen.blit(self.menu_bg_image, (0, 0))
+        else:
+            self.screen.fill((100, 149, 237)) # Fallback Azul
+            
+            # Só desenha o título via código se NÃO tiver imagem
+            title_text = "SUPER PUG GAME"
+            t_w, t_h = self.title_font.size(title_text)
+            t_pos = (WIDTH//2 - t_w//2, HEIGHT * 0.15)
+            shadow = self.title_font.render(title_text, True, (0, 0, 0))
+            self.screen.blit(shadow, (t_pos[0] + 5, t_pos[1] + 5))
+            title = self.title_font.render(title_text, True, (255, 255, 0))
+            self.screen.blit(title, t_pos)
         
-        # Título com sombra
-        title_text = "SUPER PUG GAME"
-        t_w, t_h = self.title_font.size(title_text)
-        t_pos = (WIDTH//2 - t_w//2, HEIGHT * 0.15)
-        
-        shadow = self.title_font.render(title_text, True, (0, 0, 0))
-        self.screen.blit(shadow, (t_pos[0] + 5, t_pos[1] + 5))
-        
-        title = self.title_font.render(title_text, True, (255, 255, 0))
-        self.screen.blit(title, t_pos)
-        
-        # Botões
-        self.draw_transparent_btn(self.btn_campanha, "MODO CAMPANHA", alpha=180, font_scale=1.2)
-        self.draw_transparent_btn(self.btn_missao, "SELEÇÃO DE FASE", alpha=180, font_scale=1.2)
+        # 2. Botões (Usei alpha maior para destacar em cima da arte)
+        # Se a imagem for muito poluída, aumente o alpha (ex: 200 ou 220)
+        self.draw_transparent_btn(self.btn_campanha, "MODO CAMPANHA", color=(255, 255, 0), alpha=200, font_scale=1.1)
+        self.draw_transparent_btn(self.btn_missao, "SELEÇÃO DE FASE", color=(255, 255, 255), alpha=200, font_scale=1.1)
             
         pygame.display.flip()
 
-    # --- EVENTOS E DRAW DA SELEÇÃO DE MISSÃO ---
     def events_mission_select(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -218,12 +231,10 @@ class Game:
                 else:
                     x, y = event.pos
 
-                # Botão Voltar
                 if self.btn_back.collidepoint(x, y):
                     self.state = 'MENU'
                     return
 
-                # Botões de Nível
                 for btn in self.level_buttons:
                     if btn['rect'].collidepoint(x, y):
                         self.game_mode = 'mission'
@@ -232,9 +243,10 @@ class Game:
                         self.new_game()
 
     def draw_mission_select(self):
-        self.screen.fill((50, 50, 80)) # Fundo mais escuro
+        # Fundo escuro para a seleção (ou poderia usar a mesma imagem com blur/escurecida)
+        self.screen.fill((40, 40, 60)) 
         
-        title = self.font.render("ESCOLHA UMA FASE:", True, (255, 255, 255))
+        title = self.font.render("ESCOLHA A MISSÃO:", True, (255, 255, 255))
         self.screen.blit(title, (WIDTH * 0.1, HEIGHT * 0.15))
         
         self.draw_transparent_btn(self.btn_back, "VOLTAR", color=(255, 100, 100), alpha=200)
@@ -242,11 +254,11 @@ class Game:
         for btn in self.level_buttons:
             rect = btn['rect']
             lvl = btn['level']
-            self.draw_transparent_btn(rect, str(lvl), alpha=150)
+            # Cores diferentes para destacar botões de fase
+            self.draw_transparent_btn(rect, str(lvl), color=(100, 255, 100), alpha=150, font_scale=1.5)
 
         pygame.display.flip()
 
-    # --- LÓGICA DO JOGO (PLAYING) ---
     def events(self):
         touch_left = False
         touch_right = False
@@ -327,7 +339,6 @@ class Game:
         hits = pygame.sprite.spritecollide(self.player, self.bones, True)
         for bone in hits: self.total_score += 50 
 
-        # --- LÓGICA DE VITÓRIA (BANDEIRA) ---
         if pygame.sprite.spritecollide(self.player, self.flags, False):
             self.total_score += 1000
             self.show_level_screen(f"NIVEL {self.level} COMPLETO!")
@@ -336,7 +347,6 @@ class Game:
                 self.level += 1 
                 self.new_game()
             else:
-                # Se for modo missão, volta para a seleção
                 self.state = 'MISSION_SELECT'
 
         if self.player.rect.top > HEIGHT: 
@@ -371,7 +381,6 @@ class Game:
             self.total_score = 0
             self.state = 'MENU'
         else:
-            # Em missão, apenas volta para seleção sem resetar tudo globalmente
             self.state = 'MISSION_SELECT'
 
     def draw_transparent_btn(self, rect, text, color=(255, 255, 255), alpha=80, font_scale=1.0):
@@ -379,7 +388,6 @@ class Game:
         pygame.draw.rect(s, (0, 0, 0, alpha), s.get_rect(), border_radius=15)
         pygame.draw.rect(s, color, s.get_rect(), 2, border_radius=15)
         
-        # Ajuste de fonte opcional
         if font_scale != 1.0:
             cur_font = pygame.font.Font(None, int(30 * SCALE * font_scale))
         else:
