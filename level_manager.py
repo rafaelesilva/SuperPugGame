@@ -8,25 +8,22 @@ class LevelManager:
         self.game = game
 
     def create_level(self, difficulty):
-        # 1. ESCOLHA DA TEXTURA DO CHÃO BASEADA NO NÍVEL
-        ground_img = 'chao.png' # Padrão (Grama)
-        
+        # 1. Escolha da textura do chão
+        ground_img = 'chao.png'
         if difficulty == 2:
-            ground_img = 'chao2.png' # Calçada de Copacabana
+            ground_img = 'chao2.png'
         elif difficulty >= 3:
-            ground_img = 'chao.png' # Voltar para grama ou usar chao3 no futuro
+            ground_img = 'chao.png'
             
         ground_y = HEIGHT - int(60 * SCALE)
         
-        # 2. CRIAÇÃO DO CHÃO INICIAL (Passando texture_name)
-        # O chão seguro do começo
+        # 2. Chão inicial
         p = Platform(0, ground_y, int(WIDTH * 1.5), int(60 * SCALE), texture_name=ground_img)
         self.game.all_sprites.add(p)
         self.game.platforms.add(p)
         
         current_x = int(WIDTH * 1.5)
         
-        # Ajuste de dificuldade (buracos maiores em níveis maiores)
         min_gap = int(50 * SCALE) + (difficulty * 5)
         max_gap = int(120 * SCALE) + (difficulty * 15) 
         if max_gap > 300 * SCALE: max_gap = 300 * SCALE
@@ -37,10 +34,8 @@ class LevelManager:
             # --- GERA PLATAFORMA ---
             gap = random.randint(min_gap, max_gap)
             current_x += gap
-            
             plat_w = random.randint(int(200 * SCALE), int(500 * SCALE))
             
-            # Altura variada
             if random.random() > 0.3:
                 plat_y = ground_y
             else:
@@ -48,7 +43,6 @@ class LevelManager:
                 if height_variance > 250 * SCALE: height_variance = 250 * SCALE
                 plat_y = ground_y - random.randint(int(50*SCALE), height_variance)
             
-            # Cria a plataforma passando a textura correta
             p = Platform(current_x, plat_y, plat_w, int(60 * SCALE), texture_name=ground_img)
             self.game.all_sprites.add(p)
             self.game.platforms.add(p)
@@ -76,16 +70,17 @@ class LevelManager:
                     self.game.all_sprites.add(e)
                     self.game.enemies.add(e)
                 
-                # Inimigos da Fase 2+
+                # Inimigos da Fase 2+ (Adicionado Caranguejo)
                 elif difficulty >= 2:
-                    if random.random() < 0.5:
-                        # Gatos continuam aparecendo no chão
-                        enemy_type = random.choice(['gato']) 
+                    rnd = random.random()
+                    if rnd < 0.4:
+                        # Gatos e Caranguejos no chão
+                        enemy_type = random.choice(['gato', 'caranguejo']) 
                         e = Enemy(ex, ey, enemy_type, self.game, platform=p)
                         self.game.all_sprites.add(e)
                         self.game.enemies.add(e)
                     else:
-                        # INIMIGO AÉREO (POMBA) - Mais comum na fase 2
+                        # Pombas no ar
                         py = random.randint(int(50*SCALE), int(200*SCALE))
                         px = current_x + random.randint(0, plat_w)
                         pomba = Pigeon(px, py, self.game)
@@ -94,7 +89,7 @@ class LevelManager:
 
             current_x += plat_w
 
-        # 3. PLATAFORMA FINAL E BANDEIRA
+        # 3. Plataforma Final
         current_x += int(150 * SCALE)
         final_plat = Platform(current_x, ground_y, int(500 * SCALE), int(60 * SCALE), texture_name=ground_img)
         self.game.all_sprites.add(final_plat)

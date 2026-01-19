@@ -83,26 +83,19 @@ class Platform(pygame.sprite.Sprite):
         
         try:
             tile_img = pygame.image.load(path).convert_alpha()
-            # Ajusta o tamanho do "azulejo"
             tile_size = int(50 * SCALE)
             tile_img = pygame.transform.scale(tile_img, (tile_size, tile_size))
             
-            # Desenha o chão repetido (tiling)
             for i in range(0, w, tile_size):
                 self.image.blit(tile_img, (i, 0))
-                
-                # Desenha a parte de baixo (terra) se a plataforma for alta
                 if h > tile_size:
-                    # Se for Copacabana (chao2), a terra é cor de areia
                     if 'chao2' in texture_name:
-                        fill_color = (194, 178, 128) # Areia
+                        fill_color = (194, 178, 128)
                     else:
-                        fill_color = (101, 67, 33)   # Terra Marrom
-                        
+                        fill_color = (101, 67, 33)
                     brown = pygame.Rect(i, tile_size, tile_size, h - tile_size)
                     pygame.draw.rect(self.image, fill_color, brown)
         except:
-            # Fallback (caso a imagem falhe)
             self.image.fill((101, 67, 33))
             pygame.draw.rect(self.image, (0, 255, 0), (0, 0, w, int(10*SCALE)))
 
@@ -133,8 +126,10 @@ class Enemy(pygame.sprite.Sprite):
         self.type = type_name
         self.vel_y = 0 
         
+        # Configuração de tamanho e velocidade por tipo
         if self.type == 'gato': base_size = (50, 40); base_speed = 3
         elif self.type == 'vaca': base_size = (70, 60); base_speed = 1
+        elif self.type == 'caranguejo': base_size = (45, 35); base_speed = 2
         else: base_size = (40, 60); base_speed = 2
 
         self.size = (int(base_size[0] * SCALE), int(base_size[1] * SCALE))
@@ -144,34 +139,44 @@ class Enemy(pygame.sprite.Sprite):
         path = os.path.join(ASSETS_FOLDER, f'{self.type}.png')
         try:
             img = pygame.image.load(path).convert_alpha()
-            img = pygame.transform.scale(img, self.size)
-            if self.type == 'gato' or self.type == 'guarda_chuva':
-                img = pygame.transform.flip(img, True, False)
-            self.image_right = img
-            self.image_left = pygame.transform.flip(img, True, False)
+            
+            # --- CORREÇÃO AQUI ---
+            # Consideramos que a imagem original (PNG) olha para a DIREITA.
+            # Então self.image_right recebe a imagem original.
+            self.image_right = pygame.transform.scale(img, self.size)
+            
+            # E self.image_left recebe o FLIP (espelhamento) dela.
+            self.image_left = pygame.transform.flip(self.image_right, True, False)
+            
         except:
-            self.image_right = pygame.Surface(self.size)
-            self.image_right.fill((255, 0, 0))
-            self.image_left = self.image_right
+            # Fallback visual
+            surf = pygame.Surface(self.size)
+            surf.fill((255, 0, 0))
+            self.image_left = surf
+            self.image_right = surf
 
+        # Começa indo para a esquerda, então usa image_left
+        self.direction = -1 
         self.image = self.image_left
+        
         self.rect = self.image.get_rect()
         self.rect.centerx = x
         self.rect.bottom = y 
-        
-        self.direction = -1 
 
     def update(self):
+        # Movimento lateral
         self.rect.x += self.speed * self.direction
         
+        # Lógica de patrulha na plataforma
         if self.type != 'guarda_chuva' and self.platform:
             if self.rect.left < self.platform.rect.left:
                 self.rect.left = self.platform.rect.left
-                self.direction = 1
+                self.direction = 1 # Bateu na esquerda, vira para Direita
             elif self.rect.right > self.platform.rect.right:
                 self.rect.right = self.platform.rect.right
-                self.direction = -1
+                self.direction = -1 # Bateu na direita, vira para Esquerda
 
+        # Gravidade
         if self.type != 'guarda_chuva':
             self.vel_y += GRAVITY
             self.rect.y += self.vel_y
@@ -183,8 +188,11 @@ class Enemy(pygame.sprite.Sprite):
         else:
             self.rect.y += random.choice([-2, 2])
 
-        if self.direction == 1: self.image = self.image_right
-        else: self.image = self.image_left
+        # Atualiza a imagem baseada na direção atual
+        if self.direction == 1:
+            self.image = self.image_right # Indo p/ direita, usa img direita
+        else:
+            self.image = self.image_left  # Indo p/ esquerda, usa img esquerda
         
         if self.rect.top > HEIGHT: self.kill()
 
